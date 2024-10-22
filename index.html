@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map with Swiss Cities Selection and Custom Coordinates</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #f0f4f8, #d9e4f5);
+            color: #333;
+        }
+        h2 {
+            text-align: center;
+            color: #f1c40f; /* UMB Yellow */
+        }
+        #map {
+            height: 60vh; /* Changed to responsive height */
+            width: 70%; /* Adjust width to leave space for the city list */
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            transition: transform 0.5s ease;
+            float: left; /* Align map to the left */
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+        label {
+            font-weight: bold;
+            color: #333;
+        }
+        input, select {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            transition: border 0.3s;
+        }
+        input:focus, select:focus {
+            border: 1px solid #f1c40f; /* UMB Yellow */
+            outline: none;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #f1c40f; /* UMB Yellow */
+            color: black; /* Change text color to black */
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+        button:hover {
+            background-color: #d4ac0b; /* Darker shade of UMB Yellow */
+            transform: scale(1.05);
+        }
+        .confirmation {
+            display: none;
+            position: absolute;
+            background-color: white;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+        }
+        #cityList {
+            width: 25%; /* Adjust width for the city list */
+            float: right; /* Align city list to the right */
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            height: 60vh; /* Same height as the map */
+            overflow-y: auto; /* Allow scrolling */
+        }
+
+		
+		.city-item {
+			display: flex;
+			justify-content: space-between; /* Space between items */
+			align-items: center; /* Vertically center align items */
+			margin: 5px 0;
+			padding: 10px;
+			border: 1px solid #ddd;
+			border-radius: 4px;
+		}
+
+		.city-content {
+			display: flex;
+			justify-content: space-between; /* Ensure city name and timer are spaced out */
+			width: 100%; /* Full width for alignment */
+		}
+
+		.city-name {
+			flex-grow: 1; /* Allow city name to take available space */
+		}
+
+		.timer-display {
+			margin-left: 10px; /* Adds space between the city name and timer */
+			text-align: right; /* Align text to the right */
+		}
+		
+		.flash-red {
+    animation: flash 1s infinite; /* Infinite flashing animation */
+}
+
+@keyframes flash {
+    0% {
+        color: red; /* Start color */
+    }
+    50% {
+        color: transparent; /* Middle color */
+    }
+    100% {
+        color: red; /* End color */
+    }
+}
+		
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Map with Swiss Cities and Custom Coordinates</h2>
+
+        <!-- Dropdown for city selection -->
+        <label for="cities">Select a city: </label>
+        <select id="cities" onchange="showCity()">
+            <option value="46.9481,7.4474">Bern</option>
+            <option value="46.2044,6.1432">Geneva</option>
+            <option value="47.3769,8.5417">Zurich</option>
+            <option value="46.5197,6.6323">Lausanne</option>
+            <option value="46.0211,7.7476">Zermatt</option>
+            <option value="46.8139,9.5329">Chur</option>
+            <option value="47.0502,8.3093">Lucerne</option>
+            <option value="47.5596,7.5886">Basel</option>
+            <option value="46.0037,8.9511">Lugano</option>
+            <option value="47.4239,9.3748">St. Gallen</option>
+        </select>
+
+        <!-- Input fields for custom coordinates -->
+        <br>
+        <label for="latitude">Enter Latitude: </label>
+        <input type="number" id="latitude" step="any" placeholder="Latitude">
+        <br>
+        <label for="longitude">Enter Longitude: </label>
+        <input type="number" id="longitude" step="any" placeholder="Longitude">
+        <br>
+
+        <button onclick="updateMap()">Show Coordinates on Map</button>
+    </div>
+
+    <div id="map"></div>
+    
+    <div id="cityList">
+        <h3>Displayed Cities</h3>
+        <div id="cityContainer"></div>
+    </div>
+
+    <!-- Confirmation div -->
+    <div id="confirmation" class="confirmation">
+        <span>Would you like to change the color of this marker?</span>
+        <button id="confirmButton">Yes</button>
+        <button id="cancelButton">No</button>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize the map with a default view (Bern)
+        var map = L.map('map').setView([46.9481, 7.4474], 13);
+        
+        // Load and display OpenStreetMap tiles with a custom style
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Array to store markers and city names
+        var markers = [];
+        var cityNames = [];
+        var confirmationDiv = document.getElementById('confirmation');
+
+        // Function to display selected city
+        function showCity() {
+            var cityCoordinates = document.getElementById('cities').value.split(',');
+            var lat = cityCoordinates[0];
+            var lon = cityCoordinates[1];
+            document.getElementById('latitude').value = lat;
+            document.getElementById('longitude').value = lon;
+        }
+
+        // Function to update the map based on coordinates
+        function updateMap() {
+            var lat = document.getElementById('latitude').value;
+            var lon = document.getElementById('longitude').value;
+
+            if (!lat || !lon) {
+                alert('Please select a city or enter valid coordinates');
+                return;
+            }
+
+            // Add a marker at the new coordinates with a smooth animation
+            var marker = L.marker([lat, lon], { icon: L.icon({
+                iconUrl: './placeholder_blue.png', // Default icon color
+                iconSize: [41, 41],
+                iconAnchor: [21, 41]
+            })})
+                .addTo(map)
+                .bindPopup("Location: " + lat + ", " + lon)
+                .openPopup();
+
+            // Store the marker in the array
+            markers.push(marker);
+            var cityName = "Location: " + lat + ", " + lon; // Use city name placeholder
+            cityNames.push(cityName);
+
+            // Update the city list display
+            updateCityList(cityName, marker);
+
+            // Adjust the map view to fit all markers
+            var group = L.featureGroup(markers);
+            map.fitBounds(group.getBounds());
+        }
+
+// Function to update the city list display
+function updateCityList(cityName, marker) {
+    var cityContainer = document.getElementById('cityContainer');
+
+    // Get the current date and time for when the city is added
+    var entryTime = new Date(); // Store the entry time
+
+    var cityItem = document.createElement('div');
+    cityItem.className = 'city-item';
+
+    // Create a span for the city name
+    var cityNameDisplay = document.createElement('span');
+    cityNameDisplay.textContent = cityName;
+    cityNameDisplay.className = 'city-name'; // Class for city name
+
+    // Create a span for the timer
+    var timerDisplay = document.createElement('span');
+    timerDisplay.className = 'timer-display'; // Class for timer display
+
+    // Create a div to hold the city name and timer
+    var cityContent = document.createElement('div');
+    cityContent.className = 'city-content';
+
+    // Append city name and timer display to city content
+    cityContent.appendChild(cityNameDisplay); // City name on the left
+    cityContent.appendChild(timerDisplay); // Timer display on the right
+
+    // Create the delete button
+    var deleteButton = document.createElement('button');
+    deleteButton.textContent = 'Delete';
+    deleteButton.onclick = function() {
+        removeCity(this, cityName);
+    };
+
+    // Append the city content and delete button to city item
+    cityItem.appendChild(cityContent);
+    cityItem.appendChild(deleteButton); // Append the delete button to city item
+    cityContainer.appendChild(cityItem); // Add the city item to the container
+
+    // Function to update the timer display
+    function updateTimer() {
+        var currentTime = new Date();
+        var elapsedTime = Math.floor((currentTime - entryTime) / 1000); // Calculate elapsed time in seconds
+        var minutes = Math.floor(elapsedTime / 60);
+        var seconds = elapsedTime % 60;
+        timerDisplay.textContent = `${minutes}m ${seconds}s`; // Update timer display
+
+        // Check if elapsed time is greater than 60 seconds
+        if (elapsedTime > 60) {
+            cityNameDisplay.classList.add('flash-red'); // Add flash class
+        } else {
+            cityNameDisplay.classList.remove('flash-red'); // Remove flash class
+        }
+    }
+
+    // Start the timer
+    setInterval(updateTimer, 1000); // Update every second
+
+    // Event listener to show confirmation when the marker is clicked
+    marker.on('click', function (e) {
+        // Show the confirmation div
+        confirmationDiv.style.display = 'block';
+        confirmationDiv.style.left = e.originalEvent.clientX + 'px';
+        confirmationDiv.style.top = e.originalEvent.clientY + 'px';
+
+        // Set up the confirm and cancel button actions
+        document.getElementById('confirmButton').onclick = () => {
+            var currentIconUrl = marker.getIcon().options.iconUrl;
+            var newIconUrl = currentIconUrl === './placeholder_red.png' ? './placeholder_blue.png' : './placeholder_red.png';
+            marker.setIcon(L.icon({
+                iconUrl: newIconUrl,
+                iconSize: [41, 41],
+                iconAnchor: [21, 41]
+            }));
+            confirmationDiv.style.display = 'none'; // Hide confirmation
+        };
+
+        document.getElementById('cancelButton').onclick = () => {
+            confirmationDiv.style.display = 'none'; // Hide confirmation
+        };
+    });
+}
+
+
+
+        // Function to remove a city
+        function removeCity(button, cityName) {
+            // Find the index of the city in the markers array
+            var index = cityNames.indexOf(cityName);
+            if (index > -1) {
+                // Remove the marker from the map
+                map.removeLayer(markers[index]);
+                markers.splice(index, 1); // Remove from markers array
+                cityNames.splice(index, 1); // Remove from city names array
+
+                // Remove the city item from the list
+                var cityContainer = document.getElementById('cityContainer');
+                cityContainer.removeChild(button.parentElement);
+            }
+        }
+
+        // Right-click context menu
+        map.on('contextmenu', function (e) {
+            var newLat = e.latlng.lat;
+            var newLon = e.latlng.lng;
+
+            var cityName = prompt("Enter city name:");
+            if (cityName) {
+                var option = document.createElement("option");
+                option.value = newLat + ',' + newLon;
+                option.text = cityName;
+                document.getElementById("cities").add(option);
+                updateMapWithNewCity(newLat, newLon, cityName);
+            }
+        });
+
+        // Function to update the map with the new city coordinates
+        function updateMapWithNewCity(lat, lon, cityName) {
+            var marker = L.marker([lat, lon], { icon: L.icon({
+                iconUrl: './placeholder_blue.png', // Default icon color
+                iconSize: [41, 41],
+                iconAnchor: [21, 41]
+            })})
+            .addTo(map)
+            .bindPopup(cityName + ": " + lat + ", " + lon)
+            .openPopup();
+
+            markers.push(marker);
+            cityNames.push(cityName);
+            updateCityList(cityName, marker);
+            var group = L.featureGroup(markers);
+            map.fitBounds(group.getBounds());
+        }
+    </script>
+</body>
+</html>
